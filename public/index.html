@@ -55,7 +55,6 @@
       color: #7A6020;
     }
     .container { max-width: 860px; margin: 0 auto; padding: 0 24px 60px; }
-
     .fetch-btn {
       display: block;
       margin: 36px auto;
@@ -72,7 +71,6 @@
     }
     .fetch-btn:hover:not(:disabled) { background: #F4EFE3; color: #160F04; }
     .fetch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
     .intro-text {
       text-align: center;
       font-family: 'EB Garamond', serif;
@@ -82,12 +80,6 @@
       margin-top: 32px;
       line-height: 1.8;
     }
-    .intro-sources {
-      font-size: 13px;
-      color: #8B7840;
-      letter-spacing: 0.05em;
-    }
-
     .section-head {
       display: flex;
       align-items: center;
@@ -174,6 +166,19 @@
       margin: 20px 0;
       border-radius: 2px;
     }
+    .debug-box {
+      background: #1a1a1a;
+      color: #00ff88;
+      padding: 16px;
+      font-family: monospace;
+      font-size: 11px;
+      margin: 20px 0;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 300px;
+      overflow-y: auto;
+    }
     .footer {
       text-align: center;
       padding: 24px;
@@ -207,7 +212,7 @@
   <div id="initial-state">
     <p class="intro-text">
       Clique abaixo para buscar as principais notícias de ontem.<br/>
-      <span class="intro-sources">Fontes: G1 · CNN Brasil · UOL · Globo News · BBC · CNN · NYT</span>
+      <span style="font-size:13px;color:#8B7840">Fontes: G1 · CNN Brasil · UOL · Globo News · BBC · CNN · NYT</span>
     </p>
     <button class="fetch-btn" onclick="fetchNews()">
       ◆ Buscar Notícias de Ontem · Fetch Yesterday's News ◆
@@ -226,6 +231,7 @@
 
   <div id="error-state" style="display:none">
     <div class="error-box" id="error-msg"></div>
+    <div class="debug-box" id="debug-output">Debug info will appear here...</div>
     <button class="fetch-btn" onclick="fetchNews()">Tentar Novamente · Try Again</button>
   </div>
 
@@ -257,7 +263,6 @@
     "Geral": "#3A3A3A", "General": "#3A3A3A",
   };
 
-  // Set dates
   const yesterday = new Date(Date.now() - 86400000);
   const ptDate = yesterday.toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
   const enDate = yesterday.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
@@ -272,7 +277,7 @@ Return ONLY a raw JSON object — no markdown, no backticks, no explanation what
   "brazil": [
     {
       "headline": "Título completo em português",
-      "summary": "Resumo em 3 frases em português. Seja factual e detalhado.",
+      "summary": "Resumo em 3 frases em português.",
       "source": "G1",
       "category": "Política"
     }
@@ -280,16 +285,14 @@ Return ONLY a raw JSON object — no markdown, no backticks, no explanation what
   "world": [
     {
       "headline": "Full headline in English",
-      "summary": "Summary in 3 sentences in English. Be factual and detailed.",
+      "summary": "Summary in 3 sentences in English.",
       "source": "BBC",
       "category": "Politics"
     }
   ]
 }
 
-Brazil stories: write headline and summary in Portuguese. Category options: Política, Economia, Saúde, Tecnologia, Esportes, Geral.
-World stories: write headline and summary in English. Category options: Politics, Economy, Health, Technology, Sports, General.
-Use real news from yesterday. Be factual.`;
+Brazil stories: Portuguese only. World stories: English only. Use real news from yesterday. Be factual.`;
 
   function show(id) {
     ['initial-state','loading-state','error-state','results-state'].forEach(s => {
@@ -313,6 +316,7 @@ Use real news from yesterday. Be factual.`;
 
   async function fetchNews() {
     show('loading-state');
+    let debugInfo = '';
     try {
       const response = await fetch('/api/news', {
         method: 'POST',
@@ -321,27 +325,37 @@ Use real news from yesterday. Be factual.`;
       });
 
       if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
       const result = await response.json();
+      debugInfo = 'Response received.\nContent blocks: ' + (result.content || []).length + '\n';
+      debugInfo += 'Block types: ' + (result.content || []).map(b => b.type).join(', ') + '\n';
 
-      console.log('Full API response:', JSON.stringify(result, null, 2));
-const textBlocks = (result.content || []).filter(b => b.type === 'text');
-const fullText = textBlocks.map(b => b.text).join('\n');
-console.log('Extracted text:', fullText);
-const clean = fullText.replace(/```json|```/g, '').trim();
-// Try to find JSON anywhere in the response
-const jsonMatch = clean.match(/\{[\s\S]*\}/) || fullText.match(/\{[\s\S]*\}/);
-if (!jsonMatch) {
-  console.error('No JSON found in:', fullText);
-  throw new Error('Could not parse news data. Check console for details.');
-}
+      // Collect ALL text blocks
+      const textBlocks = (result.content || []).filter(b => b.type === 'text');
+      debugInfo += 'Text blocks: ' + textBlocks.length + '\n';
 
+      const fullText = textBlocks.map(b => b.text).join('\n');
+      debugInfo += 'Full text preview: ' + fullText.substring(0, 300) + '\n';
+
+      // Clean and find JSON
+      const clean = fullText.replace(/```json|```/g, '').trim();
+      const jsonMatch = clean.match(/\{[\s\S]*\}/);
+
+      if (!jsonMatch) {
+        debugInfo += '\nNO JSON FOUND. Raw text:\n' + fullText.substring(0, 500);
+        throw new Error('Could not parse news data.');
+      }
 
       const data = JSON.parse(jsonMatch[0]);
+      debugInfo += '\nParsed OK! Brazil: ' + (data.brazil || []).length + ' World: ' + (data.world || []).length;
+
       renderCards(data.brazil || [], 'brazil-list');
       renderCards(data.world || [], 'world-list');
       show('results-state');
+
     } catch (e) {
       document.getElementById('error-msg').textContent = '⚠ Erro: ' + e.message;
+      document.getElementById('debug-output').textContent = debugInfo || 'No debug info captured.';
       show('error-state');
     }
   }
