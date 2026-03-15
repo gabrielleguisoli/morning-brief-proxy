@@ -5,7 +5,14 @@ const fetch = require("node-fetch");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Allow requests from anywhere (including Claude.ai artifacts)
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+app.options("*", cors());
 app.use(express.json());
 
 // Health check
@@ -13,16 +20,20 @@ app.get("/", (req, res) => {
   res.json({ status: "Morning Brief proxy is running ✅" });
 });
 
-// Proxy route — forwards requests to Anthropic
+// Proxy route
 app.post("/api/news", async (req, res) => {
   try {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "ANTHROPIC_API_KEY not set" });
+    }
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
-        "anthropic-beta": "interleaved-thinking-2025-05-14"
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
