@@ -1,22 +1,15 @@
 const express = require("express");
-const cors = require("cors");
 const fetch = require("node-fetch");
+const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Allow requests from anywhere (including Claude.ai artifacts)
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
-
-app.options("*", cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
 
 // Health check
-app.get("/", (req, res) => {
+app.get("/health", (req, res) => {
   res.json({ status: "Morning Brief proxy is running ✅" });
 });
 
@@ -52,5 +45,5 @@ app.post("/api/news", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Proxy running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
